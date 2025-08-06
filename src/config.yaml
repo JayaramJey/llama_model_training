@@ -1,0 +1,22 @@
+data:
+  path: "data/emotions.csv"
+  labels: ["anger", "fear", "joy", "sadness", "surprise"]
+
+model:
+  name: "bert-base-uncased"
+  train_mode: "Finetune"  
+  partial_unfreeze_layers: 5
+
+training:
+  batch_size: 16
+  epochs: 10
+  lr: 3e-4
+  weight_decay: 0.05
+  output_dir: "outputs/"
+
+logging:
+  use_wandb: true
+  project: "emotion-multilabel"
+  run_name: "bert-mode-selector"
+  log_dir: "outputs/logs/"
+
