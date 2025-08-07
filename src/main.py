@@ -52,18 +52,16 @@ train_dataset = tokenized_datasets["train"].shuffle(seed=42)
     #     data = train_dataset["labels"]
     # elif a == 1:
     #     data = test_dataset["labels"]
-  # make sure to import torch
+
 def convert_labels(example):
     corrected = []
     for val in example["labels"]:
         if val > 1:
             corrected.append(1)
         else:
-            corrected.append(val)
+            corrected.append(0)
     example["labels"] = corrected
     return example
-
-
 
 
 train_dataset = train_dataset.map(convert_labels)
