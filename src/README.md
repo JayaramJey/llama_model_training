@@ -31,7 +31,7 @@ Setup Instructions
     - numpy
 - Login to wandb using command line (optional)
     - wandb login
-- download the required datafiles by using the following command line
+- download the required datafiles by using the following command line but only run once
     - python download.py
 - Run the script using command line
     - python main.py
