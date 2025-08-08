@@ -60,8 +60,8 @@ eval_dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "l
 
 def convert_labels(example):
     corrected = []
-    for val in example["labels"]:
-        if val >= 1:
+    for int(val) in example["labels"]:
+        if int(val) >= 1:
             corrected.append(1)
         else:
             corrected.append(0)
