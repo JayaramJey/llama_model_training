@@ -14,7 +14,7 @@ import pandas as pd
 from download import download_file
 
 # Load CSV files
-datasets = load_dataset("csv", data_files={'train': ['../data/train1.csv', '../data/train2.csv'], 'test': '../data/test1.csv'})
+datasets = load_dataset("csv", data_files={'train': ['../data/train1.csv', '../data/train2.csv'], 'test': ['../data/test1.csv','../data/test2.csv'] })
 
 # List of label names for multi-label classification
 label_names = ["anger", "fear", "joy", "sadness", "surprise"]
@@ -53,10 +53,15 @@ train_dataset = tokenized_datasets["train"].shuffle(seed=42)
     # elif a == 1:
     #     data = test_dataset["labels"]
 
+
+# Conver datasets to pytorch so they can be worked with
+train_dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
+eval_dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
+
 def convert_labels(example):
     corrected = []
     for val in example["labels"]:
-        if val > 1:
+        if val >= 1:
             corrected.append(1)
         else:
             corrected.append(0)
@@ -66,10 +71,6 @@ def convert_labels(example):
 
 train_dataset = train_dataset.map(convert_labels)
 eval_dataset = eval_dataset.map(convert_labels)
-# Conver datasets to pytorch so they can be worked with
-train_dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
-eval_dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
-
 # Calculate class imbalance weights so they can be used loss function
 weigh = np.stack(train_dataset["labels"]) # This line turns the column array into a numpy array to perform calculations on
 weights = weigh.sum(axis=0) /weigh.sum() # determines how rare each label is 
@@ -170,7 +171,7 @@ trainer = Trainer(
     eval_dataset=eval_dataset,
     tokenizer=tokenizer,
     data_collator=DataCollatorWithPadding(tokenizer),
-    callbacks=[EarlyStoppingCallback(early_stopping_patience=2)],
+    callbacks=[EarlyStoppingCallback(early_stopping_patience=3)],
     compute_metrics=compute_metrics,
 )
 import os
