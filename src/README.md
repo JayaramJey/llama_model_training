@@ -54,7 +54,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 ## Load the base BERT model
 base_model = AutoModel.from_pretrained("bert-base-uncased")
 
-## Initialize your custom model architecture
+### Initialize your custom model architecture
 model = FrozenBertClassifier(base_model=base_model, num_labels=5)
 
 ### Load the saved weights
