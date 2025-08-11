@@ -1,11 +1,13 @@
-This code is used to fine tune a pretrained multi label text classification model to determine emotion in text. The model will be trained to classify whether text expresses any of the following emotions:
+# Multi label classification fine-tuning 
+
+This project fine-tunes a pretrained multi label text classification model to determine emotion in text. The model will be trained to classify whether text expresses any of the following emotions:
 - Anger
 - Fear
 - Joy
 - Sadness
 - Surprise
 
-## Project Structure
+# Project Structure
 - main.py
     - Loads the dataset from the CSV file
     - Data labels are put into one array
@@ -21,20 +23,23 @@ This code is used to fine tune a pretrained multi label text classification mode
 
 # Steps for training and use
 ### Set up instructions
+- Clone the repository
 - Set up a virtual environment using the following prompt
-    - conda create -n emotion-classifier
+    - `conda create -n emotion-classifier`
+- cd to the src file
 - Active the new environment
-    - conda activate emotion-classifier
+    - `conda activate emotion-classifier`
 - Install the required packages using the following command:
-    `pip install torch transformers datasets scikit-learn wandb pyyaml pandas numpy`
+   - `pip install -r requirements.txt`
 
 - Login to wandb using command line (optional)
-    - wandb login
+    - `wandb login`
 - download the required datafiles by using the following command line but only run once
-    - python download.py
+    - `python download.py`
 
 ### Training instructions
-- Within the config.yaml file select your choice of training (Finetune, partial, full)
+- Edit config.yal to choose your training made:         
+    - Finetune, partial, full
 - Run the script using the followibng command line to perform your selected training
     - python main.py
 
