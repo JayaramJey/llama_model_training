@@ -18,6 +18,7 @@ This code is used to fine tune a pretrained multi label text classification mode
     - Custom classification head that is used on the model for handling multi label classification outputs
 - config.yaml
     - A file which allows you to change multiple settings in training such as learning rate, training mode, ect... whithout the need to edit the code.
+    
 # Steps for training and use
 ### Set up instructions
 - Set up a virtual environment using the following prompt
@@ -66,13 +67,12 @@ model.to(device)
 model.eval()
 ```
 
-
 # How everything works
 - Bert base uncased is used as the base model
 - The custom head is used to adapt the model for multi label classification
 - Training is done using BCEWithLogitsLoss
 - Weights are assigned to different labels to deal with the imbalance in the training data
-- Select what kind of training you want
+- The config.yaml stores all the training parameters including the different training options:
     - Partial freeze: Only keep a few layers unfrozen
     - Full freeze: Keep everything frozen and only train the classifier head
     - Fine tuning: Train every layer
