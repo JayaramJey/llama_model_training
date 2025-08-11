@@ -18,22 +18,16 @@ This code is used to fine tune a pretrained multi label text classification mode
     - Custom classification head that is used on the model for handling multi label classification outputs
 - config.yaml
     - A file which allows you to change multiple settings in training such as learning rate, training mode, ect... whithout the need to edit the code.
-    
+
 # Steps for training and use
 ### Set up instructions
 - Set up a virtual environment using the following prompt
     - conda create -n emotion-classifier
 - Active the new environment
     - conda activate emotion-classifier
-- Install the following packages using pip install:
-    - torch
-    - transformers
-    - datasets
-    - scikit-learn 
-    - wandb
-    - pyyaml
-    - pandas
-    - numpy
+- Install the required packages using the following command:
+    `pip install torch transformers datasets scikit-learn wandb pyyaml pandas numpy`
+
 - Login to wandb using command line (optional)
     - wandb login
 - download the required datafiles by using the following command line but only run once

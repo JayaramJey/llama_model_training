@@ -1,8 +1,6 @@
-*.pt
-*.pyc
+
 __pycache__/
 output/
-*.safetensors*.pt
-*.safetensors
-output/
 src/.git
+eval.py
+data
