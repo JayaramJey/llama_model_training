@@ -12,9 +12,10 @@ import yaml
 from sklearn.metrics import f1_score
 import pandas as pd
 from download import download_file
+from sklearn.metrics import multilabel_confusion_matrix
 
 # Load CSV files
-datasets = load_dataset("csv", data_files={'train': ['../data/train1.csv', '../data/train2.csv'], 'test': ['../data/test1.csv','../data/test2.csv'] })
+datasets = load_dataset("csv", data_files={'train': ['../data/train1.csv','../data/train2.csv'], 'test': ['../data/test1.csv','../data/test2.csv'] })
 
 # List of label names for multi-label classification
 label_names = ["anger", "fear", "joy", "sadness", "surprise"]
@@ -23,6 +24,10 @@ label_names = ["anger", "fear", "joy", "sadness", "surprise"]
 def encode_labels(example):
     result = []
     for label in label_names:
+        if int(example[label]) > 1:
+            example[label] = 1
+        else:
+            example[label] = int(example[label])
         result.append(example[label])
     example["labels"] = result
     return example
@@ -31,12 +36,14 @@ def encode_labels(example):
 datasets["test"] = datasets["test"].map(encode_labels)
 datasets["train"] = datasets["train"].map(encode_labels)
 
+# Keep this before you tokenize
+eval_texts = datasets["test"]["text"]
 
 # Load yaml file
 with open ("config.yaml", 'r') as config:
     config = yaml.safe_load(config)
 
-#Tokenizer function 
+# Tokenizer function 
 tokenizer = AutoTokenizer.from_pretrained(config["model"]["name"])
 def tokenize_fun(examples):
     return tokenizer(examples["text"], truncation=True, max_length=512)
@@ -47,30 +54,15 @@ tokenized_datasets = datasets.map(tokenize_fun, batched=True)
 # Assigning the evaluation and training datasets to variables
 eval_dataset = tokenized_datasets["test"].shuffle(seed=42)
 train_dataset = tokenized_datasets["train"].shuffle(seed=42)
-# for a in range(2):
-    # if a == 0:
-    #     data = train_dataset["labels"]
-    # elif a == 1:
-    #     data = test_dataset["labels"]
 
-
-# Conver datasets to pytorch so they can be worked with
+# # Convert datasets to pytorch so they can be worked with
 train_dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
 eval_dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
 
-def convert_labels(example):
-    corrected = []
-    for int(val) in example["labels"]:
-        if int(val) >= 1:
-            corrected.append(1)
-        else:
-            corrected.append(0)
-    example["labels"] = corrected
-    return example
 
 
-train_dataset = train_dataset.map(convert_labels)
-eval_dataset = eval_dataset.map(convert_labels)
+# train_dataset = train_dataset.map(convert_labels)
+# eval_dataset = eval_dataset.map(convert_labels)
 # Calculate class imbalance weights so they can be used loss function
 weigh = np.stack(train_dataset["labels"]) # This line turns the column array into a numpy array to perform calculations on
 weights = weigh.sum(axis=0) /weigh.sum() # determines how rare each label is 
@@ -80,11 +72,8 @@ pos_weight = torch.tensor(weights, dtype=torch.float) # converts these weights t
 #training arguments for the huggingface trainer 
 training_args = TrainingArguments(
     output_dir=config["training"]["output_dir"],
-    eval_strategy="steps",
-    save_strategy="steps",
-    eval_steps=500,
-    save_steps=500,
-    save_total_limit=2,
+    eval_strategy="epoch",
+    save_strategy="epoch",
     per_device_train_batch_size=config["training"]["batch_size"],
     per_device_eval_batch_size=config["training"]["batch_size"],
     num_train_epochs=config["training"]["epochs"],
@@ -149,6 +138,9 @@ def compute_metrics(eval_pred):
         "f1_macro": f1_score(labels, predictions, average="macro", zero_division=0),
     }
 
+
+
+# 
 optimizer_alternate_parameters = [
     {"params": [p for n, p in model.named_parameters() if "encoder.layer.11" in n], "lr": 5e-4},
     {"params": [p for n, p in model.named_parameters() if "encoder.layer.10" in n], "lr": 3e-4},
@@ -171,7 +163,7 @@ trainer = Trainer(
     eval_dataset=eval_dataset,
     tokenizer=tokenizer,
     data_collator=DataCollatorWithPadding(tokenizer),
-    callbacks=[EarlyStoppingCallback(early_stopping_patience=3)],
+    callbacks=[EarlyStoppingCallback(early_stopping_patience=2)],
     compute_metrics=compute_metrics,
 )
 import os
@@ -190,6 +182,3 @@ torch.save({
     
 # Evaluate the model
 trainer.evaluate()
-
-
-print(eval_dataset["labels"])

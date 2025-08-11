@@ -5,7 +5,7 @@ This code is used to fine tune a pretrained multi label text classification mode
 - Sadness
 - Surprise
 
-Project Structure
+## Project Structure
 - main.py
     - Loads the dataset from the CSV file
     - Data labels are put into one array
@@ -19,13 +19,17 @@ Project Structure
 - config.yaml
     - A file which allows you to change multiple settings in training such as learning rate, training mode, ect... whithout the need to edit the code.
 
-Setup Instructions
+## Set up instructions
+- Set up a virtual environment using the following prompt
+    - conda create -n emotion-classifier
+- Active the new environment
+    - conda activate emotion-classifier
 - Install the following packages using pip install:
     - torch
     - transformers
     - datasets
     - scikit-learn 
-    - wand
+    - wandb
     - pyyaml
     - pandas
     - numpy
@@ -33,10 +37,44 @@ Setup Instructions
     - wandb login
 - download the required datafiles by using the following command line but only run once
     - python download.py
-- Run the script using command line
+
+# Training instructions
+- Within the config.yaml file select your choice of training (Finetune, partial, full)
+- Run the script using the followibng command line to perform your selected training
     - python main.py
 
-How everything works
+## Loading your model
+import torch
+from transformers import AutoModel
+from custom_head import FrozenBertClassifier
+
+## Define device (GPU or CPU)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+## Load the base BERT model
+base_model = AutoModel.from_pretrained("bert-base-uncased")
+
+## Initialize your custom model architecture
+model = FrozenBertClassifier(base_model=base_model, num_labels=5)
+
+### Load the saved weights
+checkpoint = torch.load("output/frozen_bert.pt", map_location=device)
+model.base_model.load_state_dict(checkpoint['base_model_state_dict'])
+model.classifier.load_state_dict(checkpoint['classifier_state_dict'])
+
+model.to(device)
+model.eval()
+
+
+
+    
+
+## After running main
+
+
+
+
+# How everything works
 - Bert base uncased is used as the base model
 - The custom head is used to adapt the model for multi label classification
 - Training is done using BCEWithLogitsLoss

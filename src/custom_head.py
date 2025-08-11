@@ -3,7 +3,7 @@ import torch.nn as nn
 
 # Custom model which adds a classification head
 class FrozenBertClassifier(nn.Module):
-    def __init__(self, base_model, hidden_size=768, num_labels=5, pos_weight=None):
+    def __init__(self, base_model, hidden_size=768, num_labels=5, pos_weight = None):
         super().__init__()
         # give the model the pretrained model with no head
         self.base_model = base_model
@@ -23,7 +23,7 @@ class FrozenBertClassifier(nn.Module):
             # This outputs the final logits for each label
             nn.Linear(128, num_labels)
         )
-
+        # pos_weight = pos_weight.to(next(self.parameters()).device)
         # Loss function for multi label classification
         self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
