@@ -43,6 +43,7 @@ This code is used to fine tune a pretrained multi label text classification mode
 - Run the script using the followibng command line to perform your selected training
     - python main.py
 
+'''python
 ## Loading your model
 import torch
 from transformers import AutoModel
