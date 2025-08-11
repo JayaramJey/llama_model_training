@@ -8,19 +8,23 @@ This project fine-tunes a pretrained multi label text classification model to de
 - Surprise
 
 # Project Structure
-- main.py
-    - Loads the dataset from the CSV file
-    - Data labels are put into one array
-    - Text is tokenized
-    - Three different training types available (Partial, FUll freeze, fine tune)
-    - Weights are determined and applied based on training data balance
-    - A custom head is applied to the model (Currently using BERT)
-    - The model is trained and evaluated
-- custom_head.py
-    - Custom classification head that is used on the model for handling multi label classification outputs
+- src
+    - main.py
+        - Loads the dataset from the CSV file
+        - Data labels are put into one array
+        - Text is tokenized
+        - Three different training types available (Partial, FUll freeze, fine tune)
+        - Weights are determined and applied based on training data balance
+        - A custom head is applied to the model (Currently using BERT)
+        - The model is trained and evaluated
+    - download.py
+        - Downloads the required data files to train and test the model
+    - custom_head.py
+        - Custom classification head that is used on the model for handling multi label classification outputs
 - config.yaml
     - A file which allows you to change multiple settings in training such as learning rate, training mode, ect... whithout the need to edit the code.
-
+- requirements.txt
+    - All the required packages needed to run the code
 # Steps for training and use
 ### Set up instructions
 - Clone the repository
