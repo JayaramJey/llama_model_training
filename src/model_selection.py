@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from transformers import AutoModel
-from sklearn.metrics import multilabel_confusion_matrix, f1_score
+from sklearn.metrics import multilabel_confusion_matrix, f1_score, ConfusionMatrixDisplay
 from custom_head import FrozenBertClassifier
 import matplotlib.pyplot as plt
 
@@ -50,8 +50,8 @@ def compute_metrics(eval_pred):
         metrics[f"{name}_FP"] = int(fp)
         metrics[f"{name}_FN"] = int(fn)
         metrics[f"{name}_TN"] = int(tn)
-        # metrics[f"{name}_conf_matrix"] = cms[i].tolist()
-    
+
+
     metrics["f1_micro"] = f1_score(labels, predictions, average="micro", zero_division=0)
     metrics["f1_macro"] = f1_score(labels, predictions, average="macro", zero_division=0)
 

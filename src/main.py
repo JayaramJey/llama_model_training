@@ -10,6 +10,11 @@ from model_selection import (
 import yaml
 import pandas as pd
 from custom_head import FrozenBertClassifier
+import numpy as np
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
+
+# from confusion_matrix import plot_confusion_matrices
 
 # Load yaml file
 def load_config(path):
@@ -64,7 +69,7 @@ trainer = Trainer(
 )
 
 # Train model
-trainer.train()
+# trainer.train()
 
 # Save model
 os.makedirs("output", exist_ok=True)
@@ -74,4 +79,28 @@ torch.save({
 }, "output/frozen_bert.pt")
 
 # Evaluate
-trainer.evaluate()
+# trainer.evaluate()
+
+
+label_names = ["anger", "fear", "joy", "sadness", "surprise"]
+
+predictions_output = trainer.predict(eval_dataset)
+logits, labels = predictions_output.predictions, predictions_output.label_ids
+probs = torch.sigmoid(torch.tensor(logits)).numpy()
+preds = (probs > 0.7).astype(int)
+
+full_cm = np.zeros((5, 5), dtype=int)
+
+for true_vec, pred_vec in zip(labels, preds):
+    true_indices = np.where(true_vec == 1)[0]
+    pred_indices = np.where(pred_vec == 1)[0]
+    for i in true_indices:
+        for j in pred_indices:
+            full_cm[i, j] += 1
+
+
+disp = ConfusionMatrixDisplay(confusion_matrix=full_cm, display_labels=label_names)
+plt.figure(figsize=(8, 6))
+disp.plot(cmap="Blues", values_format='d')
+plt.title("Multilabel Unified Confusion Matrix")
+plt.show()
