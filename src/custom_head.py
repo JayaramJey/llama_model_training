@@ -1,52 +1,129 @@
+# import torch
+# import torch.nn as nn
+
+# class FrozenBertClassifier(nn.Module):
+#     def __init__(self, base_model, num_labels=5, pos_weight=None):
+#         super().__init__()
+#         self.base_model = base_model
+
+#         hidden_size = getattr(base_model.config, "hidden_size", None)
+#         if hidden_size is None:
+#             raise ValueError("Could not find hidden_size from base_model.config")
+
+#         self.dropout = nn.Dropout(0.2)
+#         self.classifier = nn.Sequential(
+#             nn.Linear(hidden_size, 128),
+#             nn.ReLU(),
+#             nn.LayerNorm(128, eps=1e-5),  # LayerNorm in float32 for stability
+#             nn.Dropout(0.3),
+#             nn.Linear(128, num_labels)
+#         )
+
+#         # Store pos_weight as buffer if provided
+#         if pos_weight is not None:
+#             pos_weight = torch.as_tensor(pos_weight, dtype=torch.float32)
+#             self.register_buffer("pos_weight_buf", pos_weight)
+#         else:
+#             self.pos_weight_buf = None
+
+#         self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=self.pos_weight_buf)
+
+#     def forward(self, input_ids, attention_mask=None, labels=None):
+#         # Forward through the base model
+#         outputs = self.base_model(
+#             input_ids=input_ids,
+#             attention_mask=attention_mask,
+#             return_dict=True,
+#             output_hidden_states=True
+#         )
+
+#         # Use last token of last hidden state
+#         pooled_output = outputs.hidden_states[-1][:, -1, :]
+
+#         # Cast pooled_output to float32 for stable classifier computations
+#         pooled_output = pooled_output.to(torch.float32)
+
+#         # Apply dropout and classifier
+#         x = self.dropout(pooled_output)
+#         logits = self.classifier(x)
+
+#         # Compute loss if labels are provided
+#         if labels is not None:
+#             labels = labels.float()
+#             loss = self.loss_fn(logits, labels)
+#             return {"loss": loss, "logits": logits}
+
+#         return logits
+
+
 import torch
 import torch.nn as nn
 
-# Custom model which adds a classification head
 class FrozenBertClassifier(nn.Module):
-    def __init__(self, base_model, hidden_size=768, num_labels=5, pos_weight = None):
+    def __init__(self, base_model, num_labels=5, pos_weight=None):
         super().__init__()
-        # give the model the pretrained model with no head
         self.base_model = base_model
 
-        # Add dropout to reduce overfitting
+        # Freeze base model parameters to save memory
+        for param in self.base_model.parameters():
+            param.requires_grad = False
+
+        # Determine hidden size dynamically
+        hidden_size = getattr(base_model.config, "hidden_size", None)
+        if hidden_size is None:
+            raise ValueError("Could not determine hidden_size from base_model")
+
+        # Smaller classification head for memory efficiency
         self.dropout = nn.Dropout(0.2)
-        # Custom classification head which provides final outputs
         self.classifier = nn.Sequential(
-            # reduce the size of the input to the head
-            nn.Linear(hidden_size, 128),
-            # Help model learn patterns and not just straight lines
-            nn.ReLU(),  
-            # normalization
-            nn.LayerNorm(128),
-            # Another layer of dropout to reduce overfitting
+            nn.Linear(hidden_size, 64),  # Reduced from 128
+            nn.ReLU(),
+            nn.LayerNorm(64, eps=1e-5),  # Reduced from 128
             nn.Dropout(0.3),
-            # This outputs the final logits for each label
-            nn.Linear(128, num_labels)
+            nn.Linear(64, num_labels)    # Reduced from 128
         )
-        # pos_weight = pos_weight.to(next(self.parameters()).device)
-        # Loss function for multi label classification
-        self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
-    def forward(self, input_ids, attention_mask, token_type_ids=None, labels=None):
-        # Provide the inputs to the base model
-        outputs = self.base_model(input_ids=input_ids,
-                                  attention_mask=attention_mask,
-                                  token_type_ids=token_type_ids)
-        
-        # get the output from the base model
-        cls_output = getattr(outputs, "pooler_output", outputs.last_hidden_state[:, 0, :])  
-        
-        # use the dropout layer to prevent overfitting
-        x = self.dropout(cls_output)
+        # Pos weight buffer
+        if pos_weight is not None:
+            pos_weight = torch.as_tensor(pos_weight, dtype=torch.float32)
+            self.register_buffer("pos_weight_buf", pos_weight)
+        else:
+            self.pos_weight_buf = None
 
-        # feed the output to the head and get the output from the head
+        # Loss function
+        self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=self.pos_weight_buf)
+
+        print(f"Initialized classifier with hidden_size={hidden_size}, num_labels={num_labels}")
+
+    def forward(self, input_ids=None, attention_mask=None, labels=None):
+        # Use no_grad context for frozen base model to save memory
+        with torch.no_grad():
+            outputs = self.base_model(
+                input_ids=input_ids, 
+                attention_mask=attention_mask,
+                output_hidden_states=True,
+                return_dict=True
+            )
+
+        # GPT models → last token hidden state
+        if hasattr(outputs, "hidden_states"):
+            # last layer hidden states, last token
+            pooled_output = outputs.hidden_states[-1][:, -1, :].clone().detach()
+        elif hasattr(outputs, "logits"):
+            pooled_output = outputs.logits[:, -1, :].clone().detach()
+        else:
+            raise ValueError("Unexpected model output type")
+
+        # Re-enable gradients for classification head
+        pooled_output.requires_grad_(True)
+        pooled_output = pooled_output.to(torch.float32)
+        
+        x = self.dropout(pooled_output)
         logits = self.classifier(x)
 
-        # If labels are provided, calculate loss
+        loss = None
         if labels is not None:
-            loss = self.loss_fn(logits, labels.float())
-            # return the loss and the output logits
-            return {'loss': loss, 'logits': logits}
-        
-        # Otherwise just return logits (for inference)
-        return logits
+            labels = labels.float()
+            loss = self.loss_fn(logits, labels)
+
+        return {"loss": loss, "logits": logits}

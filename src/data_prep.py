@@ -36,7 +36,7 @@ def get_datasets(config):
     eval_texts = datasets["test"]["text"]
 
     # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(config["model"]["name"])
+    tokenizer = AutoTokenizer.from_pretrained(config["model"]["name"], force_download=True)
     
     def tokenize_fun(examples):
         return tokenizer(examples["text"], truncation=True, max_length=512)
