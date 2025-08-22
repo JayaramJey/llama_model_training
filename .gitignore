@@ -4,3 +4,5 @@ output/
 src/.git
 eval.py
 data
+sweep.yaml
+ddepspeed_config.json

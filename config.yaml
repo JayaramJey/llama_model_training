@@ -3,20 +3,33 @@ data:
   labels: ["anger", "fear", "joy", "sadness", "surprise"]
 
 model:
-  name: "bert-base-uncased"
-  train_mode: "Finetune"  
-  partial_unfreeze_layers: 5
+  name: "meta-llama/Llama-3.2-3B"
+  train_mode: "full"
+  use_lora: False
+  partial_unfreeze_layers: 3
+  num_labels: 5
 
 training:
-  batch_size: 16
-  epochs: 10
-  lr: 3e-5
-  weight_decay: 0.05
+  batch_size: 32
+  epochs: 3
+  lr: 3e-5               
+  weight_decay: 0.01
   output_dir: "outputs/"
+  final_model_path: "outputs/llama_classifier.pt"
+  warmup_ratio: 0.1
+  lr_scheduler_type: "linear"
+  metric_for_best_model: "f1_micro"
+  greater_is_better: true
+  load_best_model_at_end: true
 
 logging:
-  use_wandb: true
+  use_wandb: false
   project: "emotion-multilabel"
-  run_name: "bert-mode-selector"
+  run_name: "llama3b-emotion"
   log_dir: "outputs/logs/"
+
+early_stopping:
+  patience: 2
+  metric: "f1_micro"
+
 

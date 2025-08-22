@@ -2,11 +2,11 @@ import requests
 import os
 
 def download_file(url, save):
-    query_parameters = {"downloadformat": "csv"}
-    response = requests.get(url, params=query_parameters)
+    response = requests.get(url)
     if os.path.exists(save):
         print( "already exists. Skipping download.")
     else:
+        os.makedirs(os.path.dirname(save), exist_ok=True)
         with open(save, 'wb') as f:
             f.write(response.content)
 

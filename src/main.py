@@ -1,132 +1,114 @@
 import os
-import wandb
-import torch
-from transformers import (
-    Trainer,
-    DataCollatorWithPadding,
-    EarlyStoppingCallback,
-    AutoTokenizer,
-    TrainingArguments,
-)
-from accelerate import Accelerator
-from data_prep import get_datasets, get_pos_weight
-from model_selection import load_base_model, compute_metrics
-from custom_head import FrozenBertClassifier
+import gc
 import yaml
+import torch
+import torch.distributed as dist
+from transformers import AutoTokenizer, TrainingArguments, Trainer, DataCollatorWithPadding, EarlyStoppingCallback
+from transformers import TrainerCallback
 
-# Set memory allocation strategy
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+# Set single GPU usage
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Use only first GPU
 
-def load_config(path):
-    with open(path, 'r') as f:
-        return yaml.safe_load(f)
+from model_selection import load_base_model
+from data_prep import get_datasets, get_pos_weight
+from metrics import compute_metrics
+
+class MemoryCleanupCallback(TrainerCallback):
+    def on_epoch_end(self, args, state, control, **kwargs):
+        gc.collect()
+        torch.cuda.empty_cache()
+
+def cleanup_memory():
+    gc.collect()
+    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+
+
+# def debug_data_and_model(train_dataset, eval_dataset, model, tokenizer):
 
 def main():
-    # Initialize accelerator
-    accelerator = Accelerator(
-        gradient_accumulation_steps=4,
-        mixed_precision="bf16",
-        log_with="wandb" if os.getenv("USE_WANDB", "false").lower() == "true" else None,
+    # Load config
+    with open("../config.yaml", "r") as f:
+        config = yaml.safe_load(f)
+
+    model_name = config["model"]["name"]
+
+    # Load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name,
+        use_fast=False,
+        trust_remote_code=True
     )
-    
-    config = load_config("../config.yaml")  # Removed ../
+    tokenizer.padding_side = "right"
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
 
-    # print(config["model"]["name"])
-
-    # Print setup info on main process
-    if accelerator.is_main_process:
-        print(f"Using {accelerator.num_processes} GPUs")
-        print(f"Device: {accelerator.device}")
-        print(f"Mixed precision: {accelerator.mixed_precision}")
-
-    # Prepare datasets and class weights
+    # Load dataset
     train_dataset, eval_dataset, eval_texts = get_datasets(config)
+
+    # Load model with pos_weight
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     pos_weight = get_pos_weight(train_dataset)
+    model = load_base_model(config, pos_weight=pos_weight).to(device)
 
-    # Load base model - let accelerate handle device placement
-    with accelerator.main_process_first():
-        base_model = load_base_model(config)
-        base_model.gradient_checkpointing_enable()
-        base_model.config.use_cache = False
-
-    # Wrap with custom classifier
-    model = FrozenBertClassifier(base_model=base_model, num_labels=5, pos_weight=pos_weight)
-
-    # Initialize W&B only on main process
-    if accelerator.is_main_process and config["logging"]["use_wandb"]:
-        wandb.init(
-            project=config["logging"]["project"], 
-            name=config["logging"]["run_name"],
-            config=config
-        )
-
-    # Calculate effective batch size
-    effective_batch_size = (
-        config["training"]["batch_size"] * 
-        accelerator.num_processes * 
-        4  # gradient_accumulation_steps
+    data_collator = DataCollatorWithPadding(
+        tokenizer=tokenizer,
+        padding=True,
+        max_length=512
     )
-    
-    if accelerator.is_main_process:
-        print(f"Effective batch size: {effective_batch_size}")
 
+    # Training arguments
     training_args = TrainingArguments(
-        output_dir=config["training"]["output_dir"],  # now points to /home/jovyan/output/models/final_model
-        eval_strategy="no",
+        output_dir="./results",
+        eval_strategy="epoch" if eval_dataset else "no",
+        eval_steps=100,
         save_strategy="no",
-        # save_total_limit=1,
-        load_best_model_at_end=True,
-        metric_for_best_model="f1_micro",
-        greater_is_better=True,
-        per_device_train_batch_size=config["training"]["batch_size"],
-        per_device_eval_batch_size=config["training"]["batch_size"],
+        per_device_train_batch_size=config["training"].get("batch_size", 8),
+        per_device_eval_batch_size=config["training"].get("batch_size", 8),
+        gradient_accumulation_steps=1,
         num_train_epochs=config["training"]["epochs"],
+        fp16=False,
+        bf16=False,
+        gradient_checkpointing=False,
         learning_rate=float(config["training"]["lr"]),
-        weight_decay=config["training"]["weight_decay"],
-        lr_scheduler_type="linear",
+        weight_decay=0.01,
         warmup_ratio=0.1,
-        report_to="wandb" if config["logging"]["use_wandb"] and accelerator.is_main_process else "none",
-        gradient_accumulation_steps=4,
-        dataloader_pin_memory=False,
-        ddp_find_unused_parameters=False,
-        bf16=True,
-        remove_unused_columns=False,
-        logging_steps=10,
+        save_total_limit=2,
+        load_best_model_at_end=False,
+        metric_for_best_model="eval_f1_micro" if eval_dataset else None,
+        greater_is_better=True if eval_dataset else None,
+        report_to="none",
+        logging_strategy="steps",
+        logging_steps=50,
     )
 
-
-    # Setup tokenizer
-    with accelerator.main_process_first():
-        tokenizer = AutoTokenizer.from_pretrained(config["model"]["name"], force_download=True)
-        # Add padding token if missing (common for GPT models)
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
-
-    # Create trainer
+    # Initialize Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
+        eval_dataset=eval_dataset if eval_dataset else None,
         tokenizer=tokenizer,
-        data_collator=DataCollatorWithPadding(tokenizer),
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=2)],
-        compute_metrics=compute_metrics,
+        data_collator=data_collator,
+        compute_metrics=compute_metrics if eval_dataset else None,
+        callbacks=[MemoryCleanupCallback(), EarlyStoppingCallback(early_stopping_patience=2)]
+       
     )
 
-    # Train the model
-    if accelerator.is_main_process:
-        print("Starting training...")
-    
+    # cleanup_memory()
     trainer.train()
-    trainer.save_model("output/models/final_model")
+
+    # Save model weights
+    torch.save(model.state_dict(), "custom_llama_classifier_weights.pth")
+
+    # evaluation
     trainer.evaluate()
-    # Save final model only on main process
-    if accelerator.is_main_process:
-        print("Training completed. Saving model...")
-        trainer.save_model()
-        if config["logging"]["use_wandb"]:
-            wandb.finish()
+
+    if dist.is_available() and dist.is_initialized():
+        dist.destroy_process_group()
+    # cleanup_memory()
 
 if __name__ == "__main__":
     main()

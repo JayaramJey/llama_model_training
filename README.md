@@ -8,13 +8,14 @@ This project fine-tunes a pretrained multi label text classification model to de
 - Surprise
 
 # Project Structure
-- src
-    - main.py
+- src   
+    - data_prep
         - Loads the dataset from the CSV file
         - Data labels are put into one array
         - Text is tokenized
         - Three different training types available (Partial, FUll freeze, fine tune)
         - Weights are determined and applied based on training data balance
+    - main.py
         - A custom head is applied to the model (Currently using BERT)
         - The model is trained and evaluated
     - download.py
@@ -28,7 +29,8 @@ This project fine-tunes a pretrained multi label text classification model to de
 # Steps for training and use
 ### Set up instructions
 - Clone the repository
-- Set up a virtual environment using the following prompt
+    - git remote add origin https://github.com/JayaramJey/llama_model_training.git
+- Set up a virtual environment using the following prompt (or any other environment type you want to use)
     - `conda create -n emotion-classifier`
 - cd to the src file
 - Active the new environment
@@ -41,10 +43,14 @@ This project fine-tunes a pretrained multi label text classification model to de
 - download the required datafiles by using the following command line but only run once
     - `python download.py`
 
+### Current issues
+- f1 scores output all result in 0
+- eval_loss and grad_norm output nan
+
 ### Training instructions
-- Edit config.yal to choose your training made:         
-    - Finetune, partial, full
-- Run the script using the followibng command line to perform your selected training
+- Edit config.yaml to choose your training made:         
+    - full, partial, frozen
+- Run the script using the following command line to perform your selected training
     - python main.py
 
 ### Loading your model for testing
@@ -52,26 +58,38 @@ This project fine-tunes a pretrained multi label text classification model to de
 
 ```
 import torch
-from transformers import AutoModel
-from custom_head import FrozenBertClassifier
+from transformers import AutoTokenizer, AutoModel
+from custom_head import CustomLlamaClassifier  # or whatever your model class is called
+import yaml
 
+with open("../config.yaml", "r") as f:
+        config = yaml.safe_load(f)
+
+model_name = config["model"]["name"]
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-base_model = AutoModel.from_pretrained("bert-base-uncased")
+# Recreate the model architecture
+base_model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16,
+        device_map=None,
+        trust_remote_code=True
+    ).to(device)
+model = CustomLlamaClassifier(base_model=base_model, num_labels=5)
 
-model = FrozenBertClassifier(base_model=base_model, num_labels=5)
+# Load the saved weights
+model.load_state_dict(torch.load("custom_llama_classifier_weights.pth", map_location=device))
 
-checkpoint = torch.load("output/frozen_bert.pt", map_location=device)
-model.base_model.load_state_dict(checkpoint['base_model_state_dict'])
-model.classifier.load_state_dict(checkpoint['classifier_state_dict'])
+# Load tokenizer
+tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 model.to(device)
 model.eval()
 ```
 
 # How everything works
-- Bert base uncased is used as the base model
+- llama-3.2-3B is used as the base model
 - The custom head is used to adapt the model for multi label classification
 - Training is done using BCEWithLogitsLoss
 - Weights are assigned to different labels to deal with the imbalance in the training data
