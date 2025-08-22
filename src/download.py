@@ -1,12 +1,15 @@
 import requests
 import os
 
+# Function to download data
 def download_file(url, save):
     response = requests.get(url)
     if os.path.exists(save):
         print( "already exists. Skipping download.")
     else:
+        # Make data folder
         os.makedirs(os.path.dirname(save), exist_ok=True)
+        # Save the data in the specified folder
         with open(save, 'wb') as f:
             f.write(response.content)
 
